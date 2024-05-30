@@ -1,3 +1,5 @@
+// "C:\\Users\\sumay\\OneDrive\\Pictures\\PP.png";
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -5,12 +7,12 @@ import java.awt.event.*;
 import javax.sound.sampled.*;
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.io.File;
 import java.util.Timer;
 
 import java.io.*;
 import java.util.TimerTask;
-
 
 public class Connect4Game {
 
@@ -18,17 +20,33 @@ public class Connect4Game {
     private final int COLSIZE = 6;
     private final int ROWSIZE = 7;
 
+    // Countdown
+    private final int TIMERLIMIT = 10;
+    private int countdown = 10;
+
     // Swing components
-    private JFrame frame; // The main window
-    private JTextField player1Field; // Input field for player 1's name
-    private JTextField player2Field; // Input field for player 2's name
+    JFrame frame; // The main window
+    JTextField player1Field; // Input field for player 1's name
+    JTextField player2Field; // Input field for player 2's name
     private JLabel timerLabel; // Label to display the timer
     private Timer timer; // Timer for the game
+    private JLabel turnLabel;
     private int time; // Time elapsed (do we need this?)
     private JPanel centerPanel; // Panel to hold the game board
+    // Create a 2D array of CircleButton objects to represent the game board
+    CircleButton[][] buttons = new CircleButton[ROWSIZE][COLSIZE];
 
     private boolean isPlayer1Turn = true; // for the turn switching method
+    private Color player1Color = Color.GREEN;
+    private Color player2Color = Color.BLUE;
 
+    // Create a new instance of the Connect4 class
+    private Connect4 connect4;
+
+    // first move
+    private boolean firstMove = true;
+    // for popup
+    private boolean popupShown = false;
 
     public Connect4Game() {
         // Initialize the main window
@@ -36,7 +54,7 @@ public class Connect4Game {
         loadStartScreen();
     }
 
-    private void loadStartScreen() {
+    void loadStartScreen() {
         frame = new JFrame();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Close the application when the window is closed
         frame.setSize(800, 600); // Set the size of the window
@@ -48,7 +66,6 @@ public class Connect4Game {
         // Load the background image using the absolute file path
         ImageIcon imageIcon = new ImageIcon(filePath);
         Image image = imageIcon.getImage();
-
 
         // Initialize the center panel with a custom paintComponent method to draw the
         // background image
@@ -62,7 +79,6 @@ public class Connect4Game {
         centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS)); // Use BoxLayout for the center panel
 
         // Initialize the welcome label
-
 
         // Initialize the begin button
         JButton beginButton = new JButton("Begin");
@@ -95,7 +111,7 @@ public class Connect4Game {
         frame.setVisible(true);
     }
 
-    private void getPlayerNames() {
+    void getPlayerNames() {
         // Remove all components from the center pane
         centerPanel.removeAll();
         // Set the layout of the center panel to BoxLayout with vertical alignment
@@ -104,7 +120,7 @@ public class Connect4Game {
         JPanel player1Panel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         player1Panel.setOpaque(false); // Make the panel transparent
         JLabel player1Label = new JLabel("Player 1:"); // Label for player 1's name
-        player1Label.setForeground(Color.WHITE); // Set the label's color to white
+        player1Label.setForeground(Color.WHITE); // Set the label's color to BLACK
 
         player1Field = new JTextField(); // Text field for player 1 to enter their name
         player1Field.setPreferredSize(new Dimension(215, 30)); // Set the preferred size of the text field
@@ -131,12 +147,29 @@ public class Connect4Game {
             public void actionPerformed(ActionEvent e) {
                 if (player1Field.getText().isEmpty() || player2Field.getText().isEmpty()) {
                     // Display error message if any of the player name fields is empty
-                    JOptionPane.showMessageDialog(frame, "Both player names are required!", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(frame, "Both player names are required!", "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 } else if (player1Field.getText().equals(player2Field.getText())) {
-                    // Display error message if  player names are the same
-                    JOptionPane.showMessageDialog(frame, "Player names cannot be the same!", "Error", JOptionPane.ERROR_MESSAGE);
+                    // Display error message if player names are the same
+                    JOptionPane.showMessageDialog(frame, "Player names cannot be the same!", "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 } else {
+                    connect4 = new Connect4(player1Field.getText(), player2Field.getText());
                     displayBoard(); // When the button is clicked and both fields are filled, start the game
+                    // Start playing background music
+                    try {
+                        File musicFile = new File("C:\\Users\\sumay\\OneDrive\\Pictures\\background.wav");
+                        if (musicFile.exists()) {
+                            AudioInputStream audioIn = AudioSystem.getAudioInputStream(musicFile);
+                            Clip clip = AudioSystem.getClip();
+                            clip.open(audioIn);
+                            clip.loop(Clip.LOOP_CONTINUOUSLY);
+                        } else {
+                            System.out.println("The specified audio file was not found: " + musicFile.getAbsolutePath());
+                        }
+                    } catch (UnsupportedAudioFileException | IOException | LineUnavailableException ex) {
+                        ex.printStackTrace();
+                    }
                 }
             }
         });
@@ -156,17 +189,14 @@ public class Connect4Game {
         frame.repaint();
     }
 
-
     private void displayBoard() {
         // Remove all components from the frame
         frame.getContentPane().removeAll();
 
-
         // Set the layout of the frame to BorderLayout
         frame.setLayout(new BorderLayout());
 
-        // Set the background color of the frame to white
-        // Set the background color of the frame to white
+        // Set the background color of the frame to Blue
         frame.setBackground(Color.BLUE);
 
         // Call the displayHeaders() method to display the headers
@@ -174,9 +204,6 @@ public class Connect4Game {
 
         // Call the displayBoardPanel() method to display the game board
         displayBoardPanel();
-
-        // Start the timer
-        startTimer();
 
         // Validate and repaint the frame to reflect the changes
         frame.validate();
@@ -237,13 +264,19 @@ public class Connect4Game {
 
         timerLabel = new JLabel("Time:" + String.format("%-6d", time), SwingConstants.LEFT);
 
+        // Create a label for the turn
+        turnLabel = new JLabel("Turn:" + (isPlayer1Turn ? player1Field.getText() : player2Field.getText()),
+                SwingConstants.LEFT);
+
         // Create a panel for the game data, which includes the players' names and the
         // timer
         JPanel gameDataPanel = new JPanel(new GridLayout(1, 2));
-        gameDataPanel.add(new JLabel(player1Field.getText() + " (Red)" + " vs " + player2Field.getText() + " (Black)",
+        gameDataPanel.add(new JLabel(
+                player1Field.getText() + "(Green)" + " vs " + player2Field.getText()
+                        + "(BLUE)",
                 SwingConstants.LEFT));
+        gameDataPanel.add(turnLabel);
         gameDataPanel.add(timerLabel);
-
         // Add the game data panel to the header panel
         headerPanel.add(gameDataPanel);
 
@@ -251,9 +284,66 @@ public class Connect4Game {
         frame.add(headerPanel, BorderLayout.NORTH);
     }
 
+    public void handleTurn(int col) {
+        boolean result = connect4.placeToken(col);
+        if (result) {
+            // Find the lowest empty cell in the column
+            int row = findLowestEmptyRow(col);
+            if (row != -1) {
+                Color color = connect4.isPlayer1Turn() ? player1Color : player2Color;
+                buttons[row][col].setBackground(color);
+                switchTurns();
+
+                int winner = connect4.isGameOver();
+                if (winner != -1) {
+                    String message = winner == 0 ? "It was a draw!"
+                            : winner == 1 ? player1Field.getText() + " wins!" : player2Field.getText() + " wins!";
+                    JOptionPane optionPane = new JOptionPane(message, JOptionPane.INFORMATION_MESSAGE);
+                    JButton restartButton = new JButton("Restart");
+                    JButton exitButton = new JButton("Exit");
+                    restartButton.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            // Code to restart the game
+                            connect4 = new Connect4(player1Field.getText(), player2Field.getText());
+                            firstMove = true;
+                            isPlayer1Turn = true;
+                            countdown = TIMERLIMIT;
+                            displayBoard(); // Restart the game
+                            ((JDialog) ((JButton) e.getSource()).getTopLevelAncestor()).dispose(); // Dispose the dialog
+                        }
+                    });
+                    exitButton.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            frame.dispose(); // Dispose the frame
+                            System.exit(0);
+                        }
+                    });
+                    optionPane.setOptions(new Object[] { restartButton, exitButton });
+                    JDialog dialog = optionPane.createDialog(frame, "Game Over");
+                    stopTimer();
+                    dialog.setVisible(true);
+                }
+            }
+        } else {
+            JOptionPane.showMessageDialog(frame, "Column is full!", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+
+        if (firstMove) {
+            firstMove = false;
+            startTimer();
+        }
+    }
+
+    private int findLowestEmptyRow(int col) {
+        for (int row = ROWSIZE - 1; row >= 0; row--) {
+            if (buttons[row][col].getBackground() == Color.WHITE) {
+                return row;
+            }
+        }
+        return -1;
+    }
+
     private void displayBoardPanel() {
-        // Create a 2D array of CircleButton objects to represent the game board
-        CircleButton[][] buttons = new CircleButton[ROWSIZE][COLSIZE];
 
         // Create a JPanel with a GridBagLayout to hold the buttons
         JPanel boardPanel = new JPanel(new GridBagLayout());
@@ -270,14 +360,15 @@ public class Connect4Game {
                 // Set the maximum and preferred size of the button
                 buttons[i][j].setMaximumSize(new Dimension(50, 50));
                 buttons[i][j].setPreferredSize(new Dimension(50, 50));
+                buttons[i][j].setBackground(Color.WHITE);
 
                 // Add an ActionListener to the button
                 final int row = i;
                 final int col = j;
                 buttons[i][j].addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
-                        // When the button is clicked, set its background color to red
-                        buttons[row][col].setBackground(Color.RED);
+                        // When the button is clicked, set its background color to GREEN
+                        handleTurn(col);
                     }
                 });
 
@@ -317,19 +408,32 @@ public class Connect4Game {
 
                 SwingUtilities.invokeLater(new Runnable() {
                     public void run() {
-                        timerLabel.setText("Time: " + elapsedSeconds);
+                        if (popupShown) {
+                            // popupShown = false;
+                            return;
+                        }
+                        if (countdown == 0) {
+                            // Display Popup
+                            popupShown = true;
+                            JOptionPane.showMessageDialog(frame, "Time's up! Switching turns.", "Time's Up",
+                                    JOptionPane.INFORMATION_MESSAGE);
+                            popupShown = false;
+                            switchTurns();
+                        }
+                        timerLabel.setText("Time: " + countdown);
+                        countdown--;
                     }
                 });
 
                 // should replace 30 with a variable if we want to have the
                 // players choose how long turns should last
-                if (elapsedSeconds >= 30) {
-                    // reset the timer
-                    timer.cancel();
-                    startTimer();
-                    // Switch turns
-                    switchTurns();
-                }
+                // if (elapsedSeconds >= 30) {
+                // // reset the timer
+                // timer.cancel();
+                // startTimer();
+                // // Switch turns
+                // switchTurns();
+                // }
             }
         };
 
@@ -344,6 +448,9 @@ public class Connect4Game {
         System.out.println("SWITCH TURN!");
         // switch turns to the other player
         isPlayer1Turn = !isPlayer1Turn;
+        connect4.switchPlayer();
+        countdown = TIMERLIMIT;
+
         // refresh display
         displayHeaders();
     }
